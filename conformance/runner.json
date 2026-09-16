@@ -1,0 +1,8 @@
+{
+  "name": "ruby",
+  "probe": ["docker", "version"],
+  "build": [],
+  "run": ["docker", "run", "-i", "--rm", "-v", "${REPO}:/gem", "-w", "/gem", "ruby:3.3", "ruby", "-Ilib", "conformance/runner.rb"],
+  "connectHost": "host.docker.internal",
+  "auth": "password"
+}
