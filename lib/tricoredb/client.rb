@@ -30,6 +30,10 @@ module TriCoreDB
     DEFAULT_PORT = 8427
     DEFAULT_DATABASE = "main"
     CLOSE_TIMEOUT = 2
+    # Following the leader: the longest pause between attempts, and the connect
+    # budget for the new connection, in seconds.
+    MAX_LEADER_RETRY_DELAY = 2.0
+    FOLLOW_CONNECT_TIMEOUT = 3
 
     # @return [Integer] the feature bitmap the server granted in HELLO_OK
     attr_reader :granted_features
@@ -43,6 +47,14 @@ module TriCoreDB
     attr_accessor :read_timeout
     # @return [Integer, nil] a server-side deadline in milliseconds sent with every request
     attr_accessor :request_timeout_ms
+    # @return [Boolean] send a `not_leader` refusal again, to the leader (see {Client.connect})
+    attr_accessor :follow_leader
+    # @return [Integer] how many times a refused request is sent again
+    attr_accessor :leader_retries
+    # @return [Numeric] the first pause, in seconds, before asking again; it doubles up to 2
+    attr_accessor :leader_retry_delay
+    # @return [String] the `host:port` this connection talks to; it changes when the client follows the leader
+    attr_reader :address
 
     # Connect, handshake and (when `user` is given) authenticate.
     #
@@ -57,11 +69,19 @@ module TriCoreDB
     # @param tls [Hash, true, nil] see {Transport.tls_context}
     # @param client_name [String]
     # @param features [Integer] capabilities to request
+    # @param follow_leader [Boolean] send a request the server refused with `not_leader` again: to the
+    #   leader the refusal names, over a new connection that replaces this one (same user, secret and
+    #   TLS settings, with the leader's host as the certificate name), or, while no leader is known, to
+    #   the same node after a pause. Safe because a `not_leader` refusal was applied nowhere; never
+    #   inside a session transaction.
+    # @param leader_retries [Integer] how many times a refused request is sent again
+    # @param leader_retry_delay [Numeric] the first pause, in seconds; it doubles up to 2
     # @return [Client]
     # @raise [ConnectionError, ProtocolError, AuthError]
     def self.connect(host: "127.0.0.1", port: DEFAULT_PORT, user: nil, secret: "", database: DEFAULT_DATABASE,
                      connect_timeout: 10, read_timeout: nil, request_timeout_ms: nil, tls: nil,
-                     client_name: "tricoredb-ruby/#{VERSION}", features: Features::ALL)
+                     client_name: "tricoredb-ruby/#{VERSION}", features: Features::ALL,
+                     follow_leader: true, leader_retries: 5, leader_retry_delay: 0.25)
       transport = Transport.open(host, Integer(port), connect_timeout: connect_timeout, tls: tls)
       client = new(transport, database: database)
       begin
@@ -73,6 +93,14 @@ module TriCoreDB
       end
       client.read_timeout = read_timeout
       client.request_timeout_ms = request_timeout_ms
+      client.follow_leader = follow_leader
+      client.leader_retries = leader_retries
+      client.leader_retry_delay = leader_retry_delay
+      client.send(:remember_connect_options,
+                  host: host, port: Integer(port), user: user, secret: secret, database: database,
+                  connect_timeout: connect_timeout, read_timeout: read_timeout,
+                  request_timeout_ms: request_timeout_ms, tls: tls, client_name: client_name,
+                  features: features)
       client
     end
 
@@ -90,6 +118,11 @@ module TriCoreDB
       @txn_open = false
       @read_timeout = nil
       @request_timeout_ms = nil
+      @follow_leader = true
+      @leader_retries = 5
+      @leader_retry_delay = 0.25
+      @connect_options = nil
+      @address = ""
     end
 
     # @return [Hash{Symbol => Object}] the granted features by name, plus `:mask`
@@ -214,14 +247,25 @@ module TriCoreDB
           "llm" => nil
         }
       end
-      tag, body = exchange(Frame::REQUEST, payload)
-      raise ServerError.new(error_text(body), code: error_code(body), frame: true) if tag == Frame::ERROR
-      fail_stream(ProtocolError.new("expected RESPONSE, got #{Frame.name(tag)}")) unless tag == Frame::RESPONSE
+      pause = @leader_retry_delay
+      retried = 0
+      loop do
+        response = send_request(payload)
+        return response if response.ok?
 
-      response = Response.new(body)
-      raise response.to_error(@txn_open) unless response.ok?
+        # A `not_leader` refusal was applied nowhere, so sending it again cannot
+        # apply it twice. A session transaction belongs to this connection.
+        unless response.redirect? && @follow_leader && !@txn_open && retried < @leader_retries
+          raise response.to_error(@txn_open, retried: @follow_leader ? retried : nil)
+        end
 
-      response
+        retried += 1
+        hint = response.leader_hint
+        next if hint && hint != @address && move_to(hint)
+
+        sleep(pause)
+        pause = (pause * 2).clamp(0.001, MAX_LEADER_RETRY_DELAY)
+      end
     end
 
     # ---- SQL -----------------------------------------------------------------
@@ -808,6 +852,72 @@ module TriCoreDB
     end
 
     private
+
+    def remember_connect_options(**options)
+      @connect_options = options
+      @address = join_address(options[:host], options[:port])
+    end
+
+    def send_request(payload)
+      tag, body = exchange(Frame::REQUEST, payload)
+      raise ServerError.new(error_text(body), code: error_code(body), frame: true) if tag == Frame::ERROR
+      fail_stream(ProtocolError.new("expected RESPONSE, got #{Frame.name(tag)}")) unless tag == Frame::RESPONSE
+
+      Response.new(body)
+    end
+
+    # Replace this connection with one to `target`, opened the way this one was.
+    # @return [Boolean] false, leaving this connection untouched, when that fails
+    def move_to(target)
+      return false if @connect_options.nil?
+
+      host, port = split_address(target)
+      return false if host.nil?
+
+      options = @connect_options.merge(
+        host: host, port: port,
+        connect_timeout: [@connect_options[:connect_timeout] || FOLLOW_CONNECT_TIMEOUT, FOLLOW_CONNECT_TIMEOUT].min,
+        tls: leader_tls(@connect_options[:tls], host),
+        follow_leader: false
+      )
+      fresh = begin
+        Client.connect(**options)
+      rescue Error, SystemCallError, IOError
+        return false
+      end
+      old = @transport
+      @transport = fresh.send(:detach_transport)
+      @session_id = fresh.session_id
+      @granted_features = fresh.granted_features
+      @address = target
+      old.close
+      true
+    end
+
+    # The leader's certificate is checked against the name the hint gives.
+    def leader_tls(tls, host)
+      return tls if tls.nil? || tls == false
+
+      (tls == true ? {} : tls.transform_keys(&:to_sym)).merge(server_name: host)
+    end
+
+    def detach_transport
+      transport = @transport
+      @transport = Transport.new(nil)
+      transport
+    end
+
+    def split_address(address)
+      match = /\A\[(?<host>[^\]]+)\]:(?<port>\d+)\z/.match(address) || /\A(?<host>[^:]+):(?<port>\d+)\z/.match(address)
+      return nil if match.nil?
+
+      port = Integer(match[:port], 10)
+      port.between?(1, 65_535) ? [match[:host], port] : nil
+    end
+
+    def join_address(host, port)
+      host.to_s.include?(":") ? "[#{host}]:#{port}" : "#{host}:#{port}"
+    end
 
     def fail_stream(error)
       @transport.close

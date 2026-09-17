@@ -110,6 +110,9 @@ db.close
 | `tls` | `nil` | See [TLS](#tls) |
 | `client_name` | `"tricoredb-ruby/<version>"` | Name reported in the handshake |
 | `features` | every capability | Bitmap announced in the handshake |
+| `follow_leader` | `true` | Send a `not_leader` refusal again, to the leader |
+| `leader_retries` | `5` | How many times a refused request is sent again |
+| `leader_retry_delay` | `0.25` | First pause, in seconds, before asking again; doubles up to 2 |
 
 A connection is a single request/response stream, so one connection serves one
 thread. For concurrent work use a [pool](#connection-pool).
@@ -329,11 +332,24 @@ Every failure is a `TriCoreDB::Error`. Rescue the class you mean, and branch on
 | `ParameterError` | A value with no SQL form; nothing was sent. |
 | `PoolTimeout` | No pooled connection became free in time. |
 
-**Leader redirects.** In a cluster, a write that reaches a follower fails with
-`code == "not_leader"`, which `error.redirect?` and `response.redirect?` test. When
-the cluster knows the leader, `leader_hint` holds its `host:port`; a `nil` hint means
-the destination is unknown yet, so wait and retry — it does not mean the failure was
-something else. This driver does not follow the redirect for you.
+**Leader redirects.** In a cluster only the leader accepts writes, and a follower
+refuses with `code == "not_leader"` (`error.redirect?`). The client handles that
+itself (`follow_leader: true`, the default):
+
+- when the refusal names the leader (`leader_hint`), it opens a connection there with
+  the same user, secret and TLS settings (the leader's host is the certificate name),
+  sends the request again, and keeps that connection (`db.address` reports it);
+- while an election is in progress (no hint), it waits and asks the same node again,
+  pausing 0.25 s, then 0.5 s, up to 2 s;
+- after `leader_retries` (5) it raises the last refusal.
+
+This is safe because a `not_leader` refusal was applied nowhere. Nothing is sent again
+inside a session transaction, and never a refusal with `TriCoreDB::OUTCOME_UNKNOWN`: a
+follower handed that request to the leader and lost the answer, or the leader could
+not confirm it, so it may have been applied. The leader's address must be reachable
+from your application; when it is not, the client keeps its connection and waits. A
+pool passes these options to every connection. To handle redirects yourself, connect
+with `follow_leader: false`:
 
 ```ruby
 begin

@@ -19,7 +19,7 @@ class ScriptedPeerTest < Minitest::Test
       error = assert_raises(TriCoreDB::ServerError) { db.execute("INSERT INTO t VALUES (1)") }
       assert_equal TriCoreDB::NOT_LEADER, error.code
       assert_equal "10.9.9.7:8427", error.leader_hint
-      assert_match(/does not follow the hint/, error.message)
+      assert_match(/Following the leader is off/, error.message)
       refute db.closed?, "a refusal leaves the connection usable"
     end
   end

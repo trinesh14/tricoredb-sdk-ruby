@@ -4,6 +4,11 @@ module TriCoreDB
   # The code a not-leader refusal carries in `diagnostics.error_code`.
   NOT_LEADER = "not_leader"
 
+  # The code of a request a follower handed to the leader and lost the answer
+  # to, or one the leader could not confirm. It may or may not have been
+  # applied, so the client never sends it again.
+  OUTCOME_UNKNOWN = "outcome_unknown"
+
   # Base class for every failure raised by this gem.
   #
   # Branch on {#code}, never on the message: the message is prose the server is
@@ -25,9 +30,8 @@ module TriCoreDB
 
     # Whether the request was right but reached a node that is not the leader.
     #
-    # The driver never follows {#leader_hint} on its own: the address may not be
-    # reachable from this client, a new connection must authenticate again, and
-    # an open session transaction cannot move to another node at all.
+    # Unless `follow_leader: false` was passed to {Client.connect}, the client
+    # has already sent the request again before raising this.
     #
     # @return [Boolean]
     def redirect?

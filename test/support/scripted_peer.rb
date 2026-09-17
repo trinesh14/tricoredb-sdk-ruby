@@ -52,10 +52,11 @@ class ScriptedPeer
     @thread.abort_on_exception = false
   end
 
-  # Connect a driver to this peer.
+  # Connect a driver to this peer. A scripted peer plays one conversation, so
+  # following the leader is off unless a test turns it on.
   def connect(user: "admin", **options)
     TriCoreDB::Client.connect(host: "127.0.0.1", port: @port, user: user, secret: "pw",
-                              connect_timeout: 5, **options)
+                              connect_timeout: 5, follow_leader: false, **options)
   end
 
   def stop

@@ -43,7 +43,7 @@ class ResponseTest < Minitest::Test
     assert_kind_of TriCoreDB::ServerError, error
     assert_equal "not_leader", error.code
     assert_equal "10.9.9.7:8427", error.leader_hint
-    assert_match(/does not follow the hint/, error.message)
+    assert_match(/the leader serves clients at `10.9.9.7:8427`/, error.message)
   end
 
   def test_mid_election_there_is_a_code_but_no_address
@@ -56,7 +56,7 @@ class ResponseTest < Minitest::Test
     assert response.redirect?
     assert_nil response.leader_hint,
                "an absent hint means the destination is unknown, not that there was no redirect"
-    assert_match(/Wait and try again/, response.to_error.message)
+    assert_match(/no leader address to name/, response.to_error.message)
   end
 
   def test_an_open_transaction_is_reported_as_over_after_a_redirect

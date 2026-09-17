@@ -6,6 +6,23 @@ All notable changes to the `tricoredb` gem are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-17
+
+### Added
+
+- Following the leader: a request refused with `not_leader` is sent again, to the
+  leader the refusal names (over a new connection that replaces the current one) or,
+  while no leader is known, to the same node after a pause. On by default;
+  `follow_leader: false` restores the previous behaviour, and `leader_retries` (5) and
+  `leader_retry_delay` (0.25 s) bound it. Never inside a session transaction.
+- `TriCoreDB::OUTCOME_UNKNOWN`: a request that may or may not have been applied. It is
+  never sent again.
+- `Client#address`.
+
+### Changed
+
+- A `not_leader` error message says whether the client already retried.
+
 ## [0.1.0] - 2026-09-16
 
 First release.
@@ -42,5 +59,6 @@ First release.
 - A value with no SQL form is refused by name instead of being pushed through
   `to_s`, and text that is not valid UTF-8 is refused rather than sent as mojibake.
 
-[Unreleased]: https://github.com/trinesh14/tricoredb-sdk-ruby/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/trinesh14/tricoredb-sdk-ruby/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/trinesh14/tricoredb-sdk-ruby/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/trinesh14/tricoredb-sdk-ruby/releases/tag/v0.1.0

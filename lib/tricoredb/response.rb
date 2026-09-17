@@ -111,18 +111,23 @@ module TriCoreDB
     #
     # @param txn_open [Boolean] whether a session transaction was open on the connection
     # @return [ServerError]
-    def to_error(txn_open = false)
+    def to_error(txn_open = false, retried: 0)
       text = arm("Message") || (arm?("Json") ? JSON.generate(arm("Json")) : nil) || "request failed"
       message = "#{text} (server status: #{@status})"
       if redirect?
         message += if leader_hint
-                     " [not_leader: the leader serves clients at `#{leader_hint}`. This driver does not follow " \
-                     "the hint on its own; send the request there."
+                     " [not_leader: the leader serves clients at `#{leader_hint}`."
                    else
                      " [not_leader: there is no leader address to name (an election is in progress, or the " \
-                     "leader has no address configured). Wait and try again."
+                     "leader has no address configured)."
                    end
-        message += " The open session transaction is over: it cannot continue on another node." if txn_open
+        if txn_open
+          message += " The open session transaction is over: it cannot continue on another node."
+        elsif retried.nil?
+          message += " Following the leader is off (follow_leader: false): send the request there yourself."
+        elsif retried.positive?
+          message += " The client sent it again #{retried} time(s) and was refused each time."
+        end
         message += "]"
       end
       ServerError.new(message, code: error_code, leader_hint: leader_hint, status: @status, response: self)
