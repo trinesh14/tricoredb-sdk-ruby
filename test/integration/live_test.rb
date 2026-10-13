@@ -263,7 +263,11 @@ class LiveTest < Minitest::Test
 
   def test_a_disabled_module_is_refused_by_name
     # The test server runs without the cluster module, so the admin plane says so
-    # rather than pretending to be healthy.
+    # rather than pretending to be healthy. A server that was already running
+    # (TRICORE_HOST) has whatever modules its owner enabled, so this is about the
+    # private one only.
+    skip "needs the private test server, which runs without the cluster module" if LiveServer.running?
+
     error = assert_raises(TriCoreDB::ServerError) { @db.admin_ping }
     refute_nil error.code
     @db.ping
@@ -271,7 +275,8 @@ class LiveTest < Minitest::Test
 
   def test_a_pool_serves_several_threads_at_once
     table = unique("rb_pool")
-    pool = TriCoreDB::Pool.new(size: 4, host: @server.host, port: @server.port, user: "admin", secret: "pw")
+    pool = TriCoreDB::Pool.new(size: 4, host: @server.host, port: @server.port, user: @server.user,
+                                       secret: @server.secret)
     begin
       pool.with { |db| db.execute("CREATE TABLE #{table} (id INT PRIMARY KEY)") }
       threads = (1..8).map do |id|

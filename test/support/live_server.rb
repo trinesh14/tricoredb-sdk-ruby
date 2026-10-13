@@ -45,9 +45,14 @@ class LiveServer
   class << self
     # @return [String, nil] why the live tests cannot run, or nil when they can
     def skip_reason
-      return nil if binary
+      return nil if running? || binary
 
-      "no tricore-server binary: set TRICORE_SERVER_BIN, or run one from the Docker image (see the README)"
+      "no server: set TRICORE_HOST to one that is running, or TRICORE_SERVER_BIN to a binary (see the README)"
+    end
+
+    # @return [Boolean] whether TRICORE_HOST names a server that is already running
+    def running?
+      !ENV["TRICORE_HOST"].to_s.empty?
     end
 
     # One server shared by every live test in this process.
@@ -60,6 +65,7 @@ class LiveServer
     end
 
     def start
+      return new(nil) if running?
       raise skip_reason if binary.nil?
 
       new(binary)
@@ -89,8 +95,22 @@ class LiveServer
   attr_reader :host
   # @return [Integer] the port it listens on
   attr_reader :port
+  # @return [String] the account the tests sign in as
+  attr_reader :user
+  # @return [String] its password
+  attr_reader :secret
 
   def initialize(binary)
+    # A server that is already running is used as it is and never stopped.
+    if binary.nil?
+      @host = ENV.fetch("TRICORE_HOST")
+      @port = Integer(ENV.fetch("TRICORE_PORT", "8427"))
+      @user = ENV.fetch("TRICORE_USER", "admin")
+      @secret = ENV.fetch("TRICORE_SECRET", "")
+      return
+    end
+    @user = "admin"
+    @secret = "pw"
     @dir = Dir.mktmpdir("tricoredb-ruby-")
     config = File.join(@dir, "tricore.toml")
     File.write(config, CONFIG)
@@ -125,11 +145,13 @@ class LiveServer
 
   # Connect to this server as `admin`.
   def connect(**options)
-    TriCoreDB::Client.connect(host: @host, port: @port, user: "admin", secret: "pw",
+    TriCoreDB::Client.connect(host: @host, port: @port, user: @user, secret: @secret,
                               connect_timeout: 15, **options)
   end
 
   def stop
+    return if @pid.nil?
+
     begin
       Process.kill("KILL", @pid)
       Process.wait(@pid)
@@ -149,5 +171,5 @@ end
 
 # A name no other test in this run uses, so tests can share one server safely.
 def unique(prefix)
-  "#{prefix}_#{SecureRandom.hex(5)}"
+  "#{prefix.start_with?("rb_") ? prefix : "rb_#{prefix}"}_#{SecureRandom.hex(5)}"
 end

@@ -6,6 +6,44 @@ All notable changes to the `tricoredb` gem are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-13
+
+Every method added here needs a server at **0.1.0-rc.3 or later**. An older server
+does not know the operation and answers it with an error.
+
+### Added
+
+- 116 methods, one for each operation the server gained since 0.1.0-rc.2. The README
+  lists every one beside the server operation it sends.
+  - Cache (53): sorted sets, locks with fencing tokens, bitmaps, HyperLogLog,
+    multi-key reads and writes, conditional and atomic read-and-change writes,
+    stale-while-revalidate reads, list moves and blocking pops, set algebra,
+    pipelines, transactions and scripts, publish and poll, namespace limits and
+    statistics.
+  - Documents (13): `doc_replace`, `doc_insert_many`, `doc_delete_many`,
+    `doc_bulk_write`, `doc_explain`, collection options, renaming, index rebuilds
+    and transactions spanning requests.
+  - Vectors (21): batch upserts and deletes, batch, multi-query and by-example
+    searches, named vectors, aliases, filters, counts, partitions, text embedding,
+    index statistics and collection configuration.
+  - Graphs (29): bulk writes, in-place updates, traversals and algorithms
+    (components, cycles, k shortest paths, centrality, communities, PageRank and
+    more), indexes and constraints, CSV import, Cypher writes and transactions.
+- `TriCoreDB::BulkOp`, the four kinds of item a `doc_bulk_write` takes, and
+  `TriCoreDB::CacheOp`, the operations a cache pipeline, transaction or script runs.
+- `TriCoreDB::ScoreBound` and `TriCoreDB::CacheExpiry`.
+- `txn:` on `request` and on the document reads and writes, naming the document
+  transaction a call runs inside.
+
+### Fixed
+
+- `in_transaction?` stays true while an outer transaction is open. Since 2026-09-29
+  the server opens a nested block when `BEGIN` is sent inside a transaction, and the
+  `COMMIT` or `ROLLBACK` that ends the block (answered with `nested_depth`) leaves
+  the outer transaction open. The driver used to report the transaction as over, so
+  a pool could lend the connection on with it still open.
+
+
 ## [0.2.0] - 2026-09-17
 
 ### Added
@@ -59,6 +97,7 @@ First release.
 - A value with no SQL form is refused by name instead of being pushed through
   `to_s`, and text that is not valid UTF-8 is refused rather than sent as mojibake.
 
-[Unreleased]: https://github.com/trinesh14/tricoredb-sdk-ruby/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/trinesh14/tricoredb-sdk-ruby/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/trinesh14/tricoredb-sdk-ruby/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/trinesh14/tricoredb-sdk-ruby/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/trinesh14/tricoredb-sdk-ruby/releases/tag/v0.1.0

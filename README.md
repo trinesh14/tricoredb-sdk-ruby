@@ -293,6 +293,183 @@ path["node_path"]  # => ["u1", "u2"]
 `graph_degree`, `graph_list_nodes`, `graph_list_edges` and `graph_query` for the
 read-only Cypher subset.
 
+## Operations added for server 0.1.0-rc.3
+
+These need a server at **0.1.0-rc.3 or later**. An older server does not know the
+operation and answers it with an error, which this client raises like any other
+refusal.
+
+### Cache
+
+| Method | Server operation | What it does |
+| --- | --- | --- |
+| `cache_set_fresh` | `Cache.SetFresh` | Store a value that answers as fresh for the given time and as stale after it, until its TTL (if any) ends |
+| `cache_get_fresh` | `Cache.GetFresh` | Read with stale-while-revalidate and stampede protection |
+| `cache_set_missing` | `Cache.SetMissing` | Negative caching |
+| `cache_warm` | `Cache.Warm` | Cache warming |
+| `cache_mget` | `Cache.MGet` | Read many values in one request |
+| `cache_mset` | `Cache.MSet` | Write many values as one batch, all with the same optional TTL |
+| `cache_set_if` | `Cache.SetIf` | Write a value under a condition, with explicit control over the TTL |
+| `cache_zadd` | `Cache.ZAdd` | Add scored members to a sorted set, or re-score ones already there |
+| `cache_zrem` | `Cache.ZRem` | Remove members from a sorted set, returning how many were present |
+| `cache_zscore` | `Cache.ZScore` | The score of one member, or null when it is not in the set |
+| `cache_zcard` | `Cache.ZCard` | How many members a sorted set holds |
+| `cache_zrank` | `Cache.ZRank` | A member's position in the ordering, or null when it is absent |
+| `cache_zrange` | `Cache.ZRange` | Members by rank, `start..=stop` inclusive |
+| `cache_zrangebyscore` | `Cache.ZRangeByScore` | Members by score, between two bounds |
+| `cache_zincrby` | `Cache.ZIncrBy` | Add to a member's score, creating it at that score when absent |
+| `cache_lock_acquire` | `Cache.LockAcquire` | Take a lease on a lock, or refresh one already held by `owner` |
+| `cache_lock_renew` | `Cache.LockRenew` | Extend a lease the caller still holds |
+| `cache_lock_release` | `Cache.LockRelease` | Give up a lock |
+| `cache_setbit` | `Cache.SetBit` | Set one bit of a string value, growing it with zero bytes if needed |
+| `cache_getbit` | `Cache.GetBit` | Read one bit |
+| `cache_bitcount` | `Cache.BitCount` | Count the set bits, optionally within a byte range `(start, end)` with signed indices |
+| `cache_bitpos` | `Cache.BitPos` | The position of the first bit equal to `bit`, optionally within a byte range, or -1 when there is none |
+| `cache_bitop` | `Cache.BitOp` | Combine several values bitwise and store the result at `dest` |
+| `cache_pfadd` | `Cache.PfAdd` | Add elements to a HyperLogLog, creating it when absent |
+| `cache_pfcount` | `Cache.PfCount` | Estimated number of distinct elements |
+| `cache_pfmerge` | `Cache.PfMerge` | Merge several HyperLogLogs into `dest`, which is included as a source when it already exists |
+| `cache_lmove` | `Cache.LMove` | Atomically pop an element from one end of `source` and push it onto one end of `destination` |
+| `cache_expire_at` | `Cache.ExpireAt` | Set the absolute instant an existing live key dies |
+| `cache_stats` | `Cache.Stats` | What this node's cache is doing |
+| `cache_flush_database` | `Cache.FlushDatabase` | Delete every cache key in this database, across every namespace |
+| `cache_append` | `Cache.Append` | Concatenate bytes onto what a key already holds, and return the new length |
+| `cache_compare_and_swap` | `Cache.CompareAndSwap` | Write only if the key still holds `expected` (null |
+| `cache_getdel` | `Cache.GetDel` | Read a key and delete it in one atomic step |
+| `cache_getset` | `Cache.GetSet` | Write a value and return the one it replaced, atomically |
+| `cache_getex` | `Cache.GetEx` | Read a key and change its expiry in the same atomic step |
+| `cache_ltrim` | `Cache.LTrim` | Keep only the inclusive index range of a list, dropping everything outside it |
+| `cache_sunion` | `Cache.SUnion` | Every member of every named set, without duplicates |
+| `cache_sinter` | `Cache.SInter` | The members present in every named set |
+| `cache_sdiff` | `Cache.SDiff` | The members of the first set that are in none of the rest |
+| `cache_srandmember` | `Cache.SRandMember` | Random members of a set, without removing them |
+| `cache_hincrby` | `Cache.HIncrBy` | Add to one hash field, atomically, returning its new value |
+| `cache_pipeline` | `Cache.Pipeline` | Run cache operations in order in one round trip, each exactly as if it had been sent alone |
+| `cache_transaction` | `Cache.Transaction` | Run cache operations in order holding the cache write lock, so no other writer interleaves with them |
+| `cache_script_load` | `Cache.ScriptLoad` | Store a script |
+| `cache_script_run` | `Cache.ScriptRun` | Run a stored script with these arguments as one transaction |
+| `cache_hot_keys` | `Cache.HotKeys` | The most frequently addressed keys on this node since it started, with estimated counts |
+| `cache_purge_expired` | `Cache.PurgeExpired` | Delete every expired cache key in this database now, rather than leaving it to compaction |
+| `cache_blpop` | `Cache.BLPop` | Pop the head of the first non-empty list among `keys`, waiting up to the timeout for one to receive an element |
+| `cache_brpop` | `Cache.BRPop` | Pop the tail of the first non-empty list among `keys`, waiting up to the timeout for one to receive an element |
+| `cache_set_namespace_limit` | `Cache.SetNamespaceLimit` | Cap a namespace at `max_keys` live keys and `max_bytes` of values |
+| `cache_get_namespace_limit` | `Cache.GetNamespaceLimit` | A namespace's limit and what it holds now |
+| `cache_publish` | `Cache.Publish` | Append a message to a channel, returning the id it was given |
+| `cache_poll` | `Cache.Poll` | The messages after id `after` on these channels (a trailing `*` is a pattern) |
+
+### Documents
+
+| Method | Server operation | What it does |
+| --- | --- | --- |
+| `doc_replace` | `Document.Replace` | Swap a document's whole body for a new one |
+| `doc_insert_many` | `Document.InsertMany` | Insert several documents as one atomic batch |
+| `doc_delete_many` | `Document.DeleteMany` | Delete every document a filter matches, returning how many went |
+| `doc_rename_collection` | `Document.RenameCollection` | Move a collection, with its documents and indexes, to a new name |
+| `doc_purge_expired` | `Document.PurgeExpired` | Delete the documents a TTL index says have expired, now |
+| `doc_explain` | `Document.Explain` | Run a find and describe how it ran instead of returning its documents |
+| `doc_begin_transaction` | `Document.BeginTransaction` | Open a document transaction spanning requests, returning its id |
+| `doc_commit_transaction` | `Document.CommitTransaction` | Commit a document transaction |
+| `doc_rollback_transaction` | `Document.RollbackTransaction` | Discard a document transaction |
+| `doc_rebuild_index` | `Document.RebuildIndex` | Rebuild one index from the stored documents |
+| `doc_set_collection_options` | `Document.SetCollectionOptions` | Set a collection's options (`schema`, `defaults`, `versioned`), replacing any it had |
+| `doc_get_collection_options` | `Document.GetCollectionOptions` | A collection's options |
+| `doc_bulk_write` | `Document.BulkWrite` | Many inserts, updates, replaces and deletes on one collection, applied in order as one atomic batch |
+
+### Vectors
+
+| Method | Server operation | What it does |
+| --- | --- | --- |
+| `vector_embed` | `Vector.Embed` | Embed texts with the server's built-in embedder (deterministic feature hashing |
+| `vector_upsert_text` | `Vector.UpsertText` | Embed each text at the collection's dimension and upsert the vectors as one atomic batch |
+| `vector_set_alias` | `Vector.SetAlias` | Point an alias at a collection; a null collection removes it |
+| `vector_list_aliases` | `Vector.ListAliases` | Every alias and the collection it names, as `{alias, collection}` |
+| `vector_add_named_vector` | `Vector.AddNamedVector` | Declare a named vector on a collection |
+| `vector_upsert_named` | `Vector.UpsertNamed` | Write an item's vectors by name (`default` is the collection's own), each with the same metadata |
+| `vector_upsert_many` | `Vector.UpsertMany` | Write many vectors as one atomic batch |
+| `vector_delete_many` | `Vector.DeleteMany` | Delete many vectors by id as one atomic batch, returning how many of the ids were present |
+| `vector_search_batch` | `Vector.SearchBatch` | Run several query vectors against one collection in one request |
+| `vector_delete_by_filter` | `Vector.DeleteByFilter` | Delete every vector whose metadata matches a filter, as one atomic batch |
+| `vector_update_by_filter` | `Vector.UpdateByFilter` | Merge `set` into the metadata of every vector matching a filter, as one atomic batch |
+| `vector_count` | `Vector.Count` | How many vectors a collection holds, or, with a filter, how many match it |
+| `vector_list_partitions` | `Vector.ListPartitions` | The partitions of a collection |
+| `vector_rename_collection` | `Vector.RenameCollection` | Rename a collection, moving its catalog record and every vector with it |
+| `vector_rebuild_index` | `Vector.RebuildIndex` | Rebuild the collection's ANN index from its stored vectors and persist it, clearing every tombstone |
+| `vector_index_stats` | `Vector.IndexStats` | The shape of the collection's ANN index |
+| `vector_measure_recall` | `Vector.MeasureRecall` | Measure the ANN index's recall |
+| `vector_search_multi` | `Vector.SearchMulti` | Search with several query vectors and return one fused ranking |
+| `vector_set_collection_config` | `Vector.SetCollectionConfig` | Change a collection's configuration, returning it |
+| `vector_copy_collection` | `Vector.CopyCollection` | Copy a collection (configuration and every vector) to a new name |
+| `vector_search_by_examples` | `Vector.SearchByExamples` | Search with a query built from examples |
+
+### Graphs
+
+| Method | Server operation | What it does |
+| --- | --- | --- |
+| `graph_add_many` | `Graph.AddMany` | Write many nodes and edges as one unit |
+| `graph_remove_many` | `Graph.RemoveMany` | Delete many nodes and edges as one unit |
+| `graph_update_node` | `Graph.UpdateNode` | Change an existing node in place, returning it |
+| `graph_update_edge` | `Graph.UpdateEdge` | Change an existing edge in place, returning it |
+| `graph_copy` | `Graph.CopyGraph` | Copy a graph (nodes, edges and schema) to a new name |
+| `graph_dfs` | `Graph.Dfs` | A bounded depth-first walk from a node |
+| `graph_connected_components` | `Graph.ConnectedComponents` | Partition the graph's nodes into connected components, largest first |
+| `graph_detect_cycle` | `Graph.DetectCycle` | Whether the graph contains a cycle (`hasCycle`), and one `cycle` as evidence |
+| `graph_stats` | `Graph.GraphStats` | Counts describing a graph |
+| `graph_subgraph` | `Graph.Subgraph` | The part of the graph within `max_depth` hops of the seeds |
+| `graph_schema` | `Graph.GraphSchema` | What the graph's data looks like |
+| `graph_k_shortest_paths` | `Graph.KShortestPaths` | The `k` cheapest loopless paths between two nodes, cheapest first (default 3, at most 20) |
+| `graph_all_paths` | `Graph.AllPaths` | Every simple path between two nodes of at most `max_depth` edges (default 5, at most 10) |
+| `graph_centrality` | `Graph.Centrality` | Betweenness, closeness or eigenvector centrality |
+| `graph_communities` | `Graph.Communities` | Communities by Louvain modularity optimisation, direction ignored, largest first, with the partition's `modularity` |
+| `graph_triangle_count` | `Graph.TriangleCount` | Triangles and clustering coefficients, direction ignored |
+| `graph_node_similarity` | `Graph.NodeSimilarity` | The nodes whose neighbour sets most resemble a node's, under `results` |
+| `graph_check_consistency` | `Graph.CheckConsistency` | Check a graph's stored records against each other and against the resident mirror |
+| `graph_create_node_index` | `Graph.CreateNodeIndex` | Index node properties for finding nodes |
+| `graph_create_constraint` | `Graph.CreateConstraint` | Enforce a rule on a property of every node (or, with target `edge`, every relationship) carrying a label |
+| `graph_drop_schema_object` | `Graph.DropSchemaObject` | Drop an index or a constraint by name |
+| `graph_list_schema_objects` | `Graph.ListSchemaObjects` | A graph's `indexes` and `constraints` |
+| `graph_find_nodes` | `Graph.FindNodes` | Nodes with a label (when given) whose properties equal the given values, in id order |
+| `graph_import_csv` | `Graph.ImportCsv` | Import nodes and edges from CSV text as one atomic batch, so constraints apply |
+| `graph_page_rank` | `Graph.PageRank` | PageRank over edge direction |
+| `graph_execute` | `Graph.Execute` | Run a Cypher write |
+| `graph_begin_transaction` | `Graph.BeginTransaction` | Open a transaction on a graph, returning its id |
+| `graph_commit_transaction` | `Graph.CommitTransaction` | Apply every statement queued in a graph transaction as one |
+| `graph_rollback_transaction` | `Graph.RollbackTransaction` | Discard a graph transaction and its queued statements |
+`doc_bulk_write` takes its operations from `TriCoreDB::BulkOp` (`insert`,
+`update_one`, `replace`, `delete`), and a cache pipeline, transaction or script takes
+its from `TriCoreDB::CacheOp`:
+
+```ruby
+db.doc_bulk_write("people", [
+  TriCoreDB::BulkOp.insert({ "name" => "ada" }, id: "a"),
+  TriCoreDB::BulkOp.update_one("a", set: { "city" => "Pune" }),
+  TriCoreDB::BulkOp.delete("b")
+]) # every operation lands, or none does
+
+results = db.cache_pipeline([
+  TriCoreDB::CacheOp.set("sessions", "abc", "ada"),
+  TriCoreDB::CacheOp.get("sessions", "abc")
+]) # => [{"ok" => {"Json" => {"set" => true}}}, {"ok" => {"CacheValue" => [97, 100, 97]}}]
+```
+
+A document transaction is named in each call that runs inside it, and a graph
+transaction queues Cypher writes until it commits:
+
+```ruby
+txn = db.doc_begin_transaction
+db.doc_insert("people", { "name" => "ada" }, id: "a", txn: txn)
+db.doc_commit_transaction(txn)
+
+graph_txn = db.graph_begin_transaction("social")
+db.graph_execute("social", "CREATE (n:Person {name: 'ada'})", txn: graph_txn)
+db.graph_commit_transaction("social", graph_txn)
+```
+
+A result with one meaningful field comes back as that value; a larger one comes back
+as the server's own Hash, with the server's field names. Sorted-set bounds come from
+`TriCoreDB::ScoreBound` (a bare number is an inclusive bound) and expiries from
+`TriCoreDB::CacheExpiry`; search `options:` are the server's own names (`offset`,
+`exact`, `using`, `namespace`, ...).
+
 ## LLM context
 
 ```ruby
@@ -386,7 +563,9 @@ rake test:integration  # the live tests, against a private tricore-server
 The scripted-peer tests play the answers a real cluster would send — a `not_leader`
 refusal, a refused handshake, a frame that declares more bytes than it sends — so
 they need no server. The live tests start their own `tricore-server` on an ephemeral
-port: point `TRICORE_SERVER_BIN` at the binary, and without one they skip.
+port: point `TRICORE_SERVER_BIN` at the binary. To use a server that is already
+running instead, set `TRICORE_HOST`, `TRICORE_PORT`, `TRICORE_USER` and
+`TRICORE_SECRET`. Without either they skip.
 
 ## License
 
